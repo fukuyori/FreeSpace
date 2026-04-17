@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="272" height="71" viewBox="0 0 272 71" role="img" aria-labelledby="title desc">
+  <title id="title">FreeSpace menu bar screenshot</title>
+  <desc id="desc">A brown menu bar segment showing 190 GB (38%).</desc>
+  <rect width="272" height="71" fill="#93610C"/>
+  <text
+    x="136"
+    y="48"
+    text-anchor="middle"
+    font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+    font-size="20"
+    font-weight="600"
+    fill="#F5F5F5">190 GB (38%)</text>
+</svg>

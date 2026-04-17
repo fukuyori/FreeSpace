@@ -1,0 +1,16 @@
+.DS_Store
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/
+FreeSpace.xcodeproj/xcuserdata/
+
+# Build artifacts
+DerivedData/
+build/
+dist/
+
+# SwiftPM
+.build/
+Packages/
+Package.resolved

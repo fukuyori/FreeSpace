@@ -1,17 +1,13 @@
-//
-//  FreeSpaceApp.swift
-//  FreeSpace
-//
-//  Created by 福寄典明 on 2026/04/14.
-//
-
 import SwiftUI
 
 @main
 struct FreeSpaceApp: App {
+    @StateObject private var monitor = DiskMonitor(path: "/")
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra(monitor.menuTitle) {
+            ContentView(monitor: monitor)
         }
+        .menuBarExtraStyle(.window)
     }
 }
