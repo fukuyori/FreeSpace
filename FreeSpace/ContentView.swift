@@ -80,7 +80,7 @@ final class DiskMonitor: ObservableObject {
         timer?.invalidate()
     }
 
-    func refresh(recordDailySnapshot: Bool = false) {
+    func refresh(recordDailySnapshot: Bool = true) {
         let url = URL(fileURLWithPath: path)
 
         do {
@@ -126,8 +126,8 @@ final class DiskMonitor: ObservableObject {
 
     private func updateDeltaTexts(currentAvailable: Int64) {
         todayDeltaText = formattedDelta(from: historyStore.bytesForToday(), current: currentAvailable)
-        weekDeltaText = formattedDelta(from: historyStore.bytes(daysBeforeToday: 7), current: currentAvailable)
-        monthDeltaText = formattedDelta(from: historyStore.bytes(monthsBeforeToday: 1), current: currentAvailable)
+        weekDeltaText = formattedDelta(from: historyStore.bytes(onOrBeforeDaysBeforeToday: 7), current: currentAvailable)
+        monthDeltaText = formattedDelta(from: historyStore.bytes(onOrBeforeMonthsBeforeToday: 1), current: currentAvailable)
     }
 
     private func formattedDelta(from baseline: Int64?, current: Int64) -> String {
@@ -194,12 +194,28 @@ private final class DailyFreeSpaceHistoryStore {
         return loadHistory()[dateKey(for: date)]
     }
 
+    func bytes(onOrBeforeDaysBeforeToday days: Int, now: Date = Date()) -> Int64? {
+        guard let date = calendar.date(byAdding: .day, value: -days, to: now) else {
+            return nil
+        }
+
+        return latestBytes(onOrBefore: date)
+    }
+
     func bytes(monthsBeforeToday months: Int, now: Date = Date()) -> Int64? {
         guard let date = calendar.date(byAdding: .month, value: -months, to: now) else {
             return nil
         }
 
         return loadHistory()[dateKey(for: date)]
+    }
+
+    func bytes(onOrBeforeMonthsBeforeToday months: Int, now: Date = Date()) -> Int64? {
+        guard let date = calendar.date(byAdding: .month, value: -months, to: now) else {
+            return nil
+        }
+
+        return latestBytes(onOrBefore: date)
     }
 
     private func loadHistory() -> [String: Int64] {
@@ -217,6 +233,15 @@ private final class DailyFreeSpaceHistoryStore {
         }
 
         defaults.set(data, forKey: defaultsKey)
+    }
+
+    private func latestBytes(onOrBefore date: Date) -> Int64? {
+        let targetKey = dateKey(for: date)
+
+        return loadHistory()
+            .filter { $0.key <= targetKey }
+            .max { $0.key < $1.key }?
+            .value
     }
 
     private func dateKey(for date: Date) -> String {

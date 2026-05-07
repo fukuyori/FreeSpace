@@ -65,4 +65,4 @@ These scripts build the app without code signing so you can generate local `.dmg
 
 ## Version
 
-The current app version is `1.1`.
+The current app version is `1.1.1`.
