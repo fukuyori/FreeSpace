@@ -37,6 +37,8 @@ struct ContentView: View {
 
             Divider()
 
+            Text("バージョン: \(appVersionText)")
+
             Button("今すぐ更新") {
                 monitor.refresh()
             }
@@ -50,6 +52,21 @@ struct ContentView: View {
         .onAppear {
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
         }
+    }
+
+    private var appVersionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        guard let version, !version.isEmpty else {
+            return "-"
+        }
+
+        if let build, !build.isEmpty {
+            return "\(version) (\(build))"
+        }
+
+        return version
     }
 }
 
@@ -236,12 +253,31 @@ private final class DailyFreeSpaceHistoryStore {
     }
 
     private func latestBytes(onOrBefore date: Date) -> Int64? {
-        let targetKey = dateKey(for: date)
+        let targetDate = calendar.startOfDay(for: date)
+        var latestDate: Date?
+        var latestBytes: Int64?
 
-        return loadHistory()
-            .filter { $0.key <= targetKey }
-            .max { $0.key < $1.key }?
-            .value
+        for (key, bytes) in loadHistory() {
+            guard let historyDate = historyDate(fromKey: key), historyDate <= targetDate else {
+                continue
+            }
+
+            if latestDate == nil || historyDate > latestDate! {
+                latestDate = historyDate
+                latestBytes = bytes
+            }
+        }
+
+        return latestBytes
+    }
+
+    private func historyDate(fromKey key: String) -> Date? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else {
+            return nil
+        }
+
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
     private func dateKey(for date: Date) -> String {

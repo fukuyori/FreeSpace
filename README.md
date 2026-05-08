@@ -14,6 +14,8 @@ FreeSpace is a small SwiftUI menu bar app for macOS that shows available disk sp
 - Shows `free space (free percentage)` in the menu bar
 - Displays GB as whole numbers
 - Displays TB with up to 2 decimal places, truncated rather than rounded
+- Tracks daily free space and shows today / 1-week / 1-month deltas in the popover
+  (delta lines display `-` until history old enough to compare against exists)
 - Supports launch at login
 
 ## Requirements
@@ -41,7 +43,7 @@ DerivedData/Build/Products/Debug/FreeSpace.app/Contents/MacOS/FreeSpace
 
 ## Packaging
 
-Create a release build:
+Create a release build (signed with Developer ID Application + Hardened Runtime):
 
 ```bash
 ./scripts/build-release.sh
@@ -53,16 +55,47 @@ Create a DMG:
 ./scripts/create-dmg.sh
 ```
 
-Create a PKG:
+Create a signed and notarized PKG:
 
 ```bash
 ./scripts/create-pkg.sh
 ```
 
+This runs the release build, signs it with `Developer ID Application: Noriaki Fukuyori (Q6GG27UYG5)`, packages it with `pkgbuild` signed by the matching `Developer ID Installer` certificate, then submits it to Apple's notary service and staples the ticket to the resulting `.pkg`.
+
 Artifacts are written to `dist/`.
 
-These scripts build the app without code signing so you can generate local `.dmg` and `.pkg` artifacts in a development environment.
+### Notarization setup
+
+The notarization step uses `xcrun notarytool` with credentials stored in the keychain. Register them once:
+
+```bash
+xcrun notarytool store-credentials freespace-notary \
+  --apple-id <your-apple-id> \
+  --team-id Q6GG27UYG5 \
+  --password <app-specific-password>
+```
+
+Generate an app-specific password at <https://appleid.apple.com> → Sign-In and Security → App-Specific Passwords.
+
+Override the keychain profile name with `NOTARY_PROFILE=<name>` if you stored it under a different label.
+
+To skip notarization (e.g. for a quick local build), set `SKIP_NOTARIZATION=1`:
+
+```bash
+SKIP_NOTARIZATION=1 ./scripts/create-pkg.sh
+```
+
+You can also run notarization on its own against an existing `.pkg`:
+
+```bash
+./scripts/notarize-pkg.sh dist/FreeSpace-1.1.2.pkg
+```
+
+### App Sandbox
+
+App Sandbox is disabled in the project so that the Xcode-built app and the installed PKG share the same `UserDefaults` location (`~/Library/Preferences/org.spumoni.freespace.FreeSpace.plist`). Without this, the sandboxed Xcode build and the unsandboxed installed app would record their daily history into separate containers and the week / month deltas would only see whichever side recorded them.
 
 ## Version
 
-The current app version is `1.1.1`.
+The current app version is `1.1.2`.
