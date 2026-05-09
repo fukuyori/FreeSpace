@@ -9,14 +9,16 @@ FreeSpace is a small SwiftUI menu bar app for macOS that shows available disk sp
 ## Features
 
 - Menu bar app that does not appear in the Dock
-- Monitors free space on the root volume `/`
+- Monitors available space on the root volume `/`
 - Refreshes every 5 seconds
-- Shows `free space (free percentage)` in the menu bar
+- Shows `available space (available percentage)` in the menu bar
 - Displays GB as whole numbers
 - Displays TB with up to 2 decimal places, truncated rather than rounded
-- Tracks daily free space and shows today / 1-week / 1-month deltas in the popover
+- Tracks daily available space and shows today / 1-week / 1-month deltas in the popover
   (delta lines display `-` until history old enough to compare against exists)
 - Supports launch at login
+
+FreeSpace combines lightweight capacity APIs and displays the largest valid available-space value from `volumeAvailableCapacityKey`, `volumeAvailableCapacityForImportantUsageKey`, `volumeAvailableCapacityForOpportunisticUsageKey`, and a `statfs` fallback. This avoids heavy disk scans and external commands while moving closer to Finder or System Settings "Available" storage when macOS reports purgeable capacity through Foundation. If macOS does not report purgeable capacity through these APIs, FreeSpace falls back to the raw APFS/POSIX free-space value.
 
 ## Requirements
 
@@ -89,7 +91,7 @@ SKIP_NOTARIZATION=1 ./scripts/create-pkg.sh
 You can also run notarization on its own against an existing `.pkg`:
 
 ```bash
-./scripts/notarize-pkg.sh dist/FreeSpace-1.1.2.pkg
+./scripts/notarize-pkg.sh dist/FreeSpace-1.2.0.pkg
 ```
 
 ### App Sandbox
@@ -98,4 +100,4 @@ App Sandbox is disabled in the project so that the Xcode-built app and the insta
 
 ## Version
 
-The current app version is `1.1.2`.
+The current app version is `1.2.0`.

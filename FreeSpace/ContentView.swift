@@ -9,8 +9,8 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("対象: \(monitor.path)")
-            Text("空き容量: \(monitor.freeText)")
-            Text("空き率: \(monitor.freePercentText)")
+            Text("利用可能容量: \(monitor.freeText)")
+            Text("利用可能率: \(monitor.freePercentText)")
             Text("今日の増減: \(monitor.todayDeltaText)")
             Text("1週間の増減: \(monitor.weekDeltaText)")
             Text("1ヶ月の増減: \(monitor.monthDeltaText)")
@@ -72,6 +72,7 @@ struct ContentView: View {
 
 import Foundation
 import Combine
+import Darwin
 
 final class DiskMonitor: ObservableObject {
     @Published var menuTitle: String = "-- (--%)"
@@ -103,12 +104,14 @@ final class DiskMonitor: ObservableObject {
         do {
             let values = try url.resourceValues(forKeys: [
                 .volumeTotalCapacityKey,
+                .volumeAvailableCapacityForImportantUsageKey,
+                .volumeAvailableCapacityForOpportunisticUsageKey,
                 .volumeAvailableCapacityKey
             ])
 
             guard
                 let total = values.volumeTotalCapacity,
-                let available = values.volumeAvailableCapacity
+                let available = values.bestAvailableCapacity(path: path)
             else {
                 menuTitle = "N/A"
                 freeText = "取得失敗"
@@ -117,7 +120,7 @@ final class DiskMonitor: ObservableObject {
             }
 
             let total64 = Int64(total)
-            let available64 = Int64(available)
+            let available64 = max(0, min(available, total64))
             let freePercent = total64 > 0
                 ? (Double(available64) / Double(total64)) * 100.0
                 : 0.0
@@ -174,6 +177,36 @@ final class DiskMonitor: ObservableObject {
 
         return "\(bytes / oneGB) GB"
     }
+}
+
+private extension URLResourceValues {
+    func bestAvailableCapacity(path: String) -> Int64? {
+        [
+            volumeAvailableCapacity.map(Int64.init),
+            positiveCapacity(volumeAvailableCapacityForImportantUsage),
+            positiveCapacity(volumeAvailableCapacityForOpportunisticUsage),
+            statfsAvailableCapacity(path: path)
+        ]
+        .compactMap { $0 }
+        .max()
+    }
+
+    private func positiveCapacity(_ capacity: Int64?) -> Int64? {
+        guard let capacity, capacity > 0 else {
+            return nil
+        }
+
+        return capacity
+    }
+}
+
+private func statfsAvailableCapacity(path: String) -> Int64? {
+    var stats = statfs()
+    guard statfs(path, &stats) == 0 else {
+        return nil
+    }
+
+    return Int64(stats.f_bavail) * Int64(stats.f_bsize)
 }
 
 private final class DailyFreeSpaceHistoryStore {
