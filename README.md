@@ -1,6 +1,6 @@
 # FreeSpace
 
-FreeSpace is a small SwiftUI menu bar app for macOS that shows available disk space.
+FreeSpace is a small SwiftUI menu bar app for macOS that shows free disk space.
 
 ## Screenshot
 
@@ -9,16 +9,15 @@ FreeSpace is a small SwiftUI menu bar app for macOS that shows available disk sp
 ## Features
 
 - Menu bar app that does not appear in the Dock
-- Monitors available space on the root volume `/`
+- Monitors free space on the root volume `/`
 - Refreshes every 5 seconds
-- Shows `available space (available percentage)` in the menu bar
-- Displays GB as whole numbers
-- Displays TB with up to 2 decimal places, truncated rather than rounded
-- Tracks daily available space and shows today / 1-week / 1-month deltas in the popover
+- Shows `free space (free percentage)` in the menu bar
+- Displays GB and TB with 2 decimal places
+- Tracks daily free space and shows today / 1-week / 1-month deltas in the popover
   (delta lines display `-` until history old enough to compare against exists)
 - Supports launch at login
 
-FreeSpace combines lightweight capacity APIs and displays the largest valid available-space value from `volumeAvailableCapacityKey`, `volumeAvailableCapacityForImportantUsageKey`, `volumeAvailableCapacityForOpportunisticUsageKey`, and a `statfs` fallback. This avoids heavy disk scans and external commands while moving closer to Finder or System Settings "Available" storage when macOS reports purgeable capacity through Foundation. If macOS does not report purgeable capacity through these APIs, FreeSpace falls back to the raw APFS/POSIX free-space value.
+FreeSpace uses `volumeAvailableCapacityKey`, with a `statfs` fallback, then applies a lightweight System Settings approximation using APFS Data volume usage and macOS Storage Settings cache data when available. It does not perform full disk scans or run external commands, so the value is an estimate and can differ from the Storage settings screen when macOS cache data is missing or stale.
 
 ## Requirements
 
@@ -91,7 +90,7 @@ SKIP_NOTARIZATION=1 ./scripts/create-pkg.sh
 You can also run notarization on its own against an existing `.pkg`:
 
 ```bash
-./scripts/notarize-pkg.sh dist/FreeSpace-1.2.0.pkg
+./scripts/notarize-pkg.sh dist/FreeSpace-1.3.0.pkg
 ```
 
 ### App Sandbox
@@ -100,4 +99,4 @@ App Sandbox is disabled in the project so that the Xcode-built app and the insta
 
 ## Version
 
-The current app version is `1.2.0`.
+The current app version is `1.3.0`.

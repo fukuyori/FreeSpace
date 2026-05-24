@@ -9,8 +9,8 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("対象: \(monitor.path)")
-            Text("利用可能容量: \(monitor.freeText)")
-            Text("利用可能率: \(monitor.freePercentText)")
+            Text("空き容量: \(monitor.freeText)")
+            Text("空き率: \(monitor.freePercentText)")
             Text("今日の増減: \(monitor.todayDeltaText)")
             Text("1週間の増減: \(monitor.weekDeltaText)")
             Text("1ヶ月の増減: \(monitor.monthDeltaText)")
@@ -104,14 +104,12 @@ final class DiskMonitor: ObservableObject {
         do {
             let values = try url.resourceValues(forKeys: [
                 .volumeTotalCapacityKey,
-                .volumeAvailableCapacityForImportantUsageKey,
-                .volumeAvailableCapacityForOpportunisticUsageKey,
                 .volumeAvailableCapacityKey
             ])
 
             guard
                 let total = values.volumeTotalCapacity,
-                let available = values.bestAvailableCapacity(path: path)
+                let available = values.volumeAvailableCapacity.map(Int64.init) ?? statfsAvailableCapacity(path: path)
             else {
                 menuTitle = "N/A"
                 freeText = "取得失敗"
@@ -120,7 +118,7 @@ final class DiskMonitor: ObservableObject {
             }
 
             let total64 = Int64(total)
-            let available64 = max(0, min(available, total64))
+            let available64 = max(0, min(estimatedSystemSettingsAvailableCapacity(total: total64, rawAvailable: available), total64))
             let freePercent = total64 > 0
                 ? (Double(available64) / Double(total64)) * 100.0
                 : 0.0
@@ -128,7 +126,7 @@ final class DiskMonitor: ObservableObject {
             let freeCapacityText = formatCapacity(available64)
             freeText = freeCapacityText
             freePercentText = String(format: "%.0f%%", freePercent)
-            menuTitle = "\(freeCapacityText) (\(Int(freePercent))%)"
+            menuTitle = "\(freeCapacityText) (\(String(format: "%.0f", freePercent))%)"
 
             if recordDailySnapshot {
                 historyStore.recordTodayIfNeeded(bytes: available64)
@@ -169,34 +167,10 @@ final class DiskMonitor: ObservableObject {
         let oneTB: Int64 = 1_000_000_000_000
 
         if bytes >= oneTB {
-            let terabytesTimes100 = (bytes * 100) / oneTB
-            let wholePart = terabytesTimes100 / 100
-            let fractionalPart = terabytesTimes100 % 100
-            return String(format: "%lld.%02lld TB", wholePart, fractionalPart)
+            return String(format: "%.2f TB", Double(bytes) / Double(oneTB))
         }
 
-        return "\(bytes / oneGB) GB"
-    }
-}
-
-private extension URLResourceValues {
-    func bestAvailableCapacity(path: String) -> Int64? {
-        [
-            volumeAvailableCapacity.map(Int64.init),
-            positiveCapacity(volumeAvailableCapacityForImportantUsage),
-            positiveCapacity(volumeAvailableCapacityForOpportunisticUsage),
-            statfsAvailableCapacity(path: path)
-        ]
-        .compactMap { $0 }
-        .max()
-    }
-
-    private func positiveCapacity(_ capacity: Int64?) -> Int64? {
-        guard let capacity, capacity > 0 else {
-            return nil
-        }
-
-        return capacity
+        return String(format: "%.2f GB", Double(bytes) / Double(oneGB))
     }
 }
 
@@ -207,6 +181,106 @@ private func statfsAvailableCapacity(path: String) -> Int64? {
     }
 
     return Int64(stats.f_bavail) * Int64(stats.f_bsize)
+}
+
+private func estimatedSystemSettingsAvailableCapacity(total: Int64, rawAvailable: Int64) -> Int64 {
+    guard
+        let dataUsed = volumeSpaceUsed(path: "/System/Volumes/Data"),
+        let cachedCategorySize = storageSettingsCachedCategorySize()
+    else {
+        return rawAvailable
+    }
+
+    let visibleUsed = max(0, dataUsed - cachedCategorySize)
+    let estimatedAvailable = total - visibleUsed
+    return max(rawAvailable, estimatedAvailable)
+}
+
+private func volumeSpaceUsed(path: String) -> Int64? {
+    var attributes = attrlist()
+    attributes.bitmapcount = UInt16(ATTR_BIT_MAP_COUNT)
+    attributes.volattr = attrgroup_t(UInt32(ATTR_VOL_INFO) | UInt32(ATTR_VOL_SPACEUSED))
+
+    let bufferSize = 4 + MemoryLayout<Int64>.size
+    var buffer = [UInt8](repeating: 0, count: bufferSize)
+    let result = buffer.withUnsafeMutableBytes { rawBuffer in
+        withUnsafeMutablePointer(to: &attributes) { attributesPointer in
+            getattrlist(path, attributesPointer, rawBuffer.baseAddress, bufferSize, 0)
+        }
+    }
+
+    guard result == 0 else {
+        return nil
+    }
+
+    return buffer.withUnsafeBytes { rawBuffer in
+        rawBuffer.loadUnaligned(fromByteOffset: 4, as: Int64.self)
+    }
+}
+
+private func storageSettingsCachedCategorySize() -> Int64? {
+    let byHostURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Preferences/ByHost", isDirectory: true)
+
+    guard let contents = try? FileManager.default.contentsOfDirectory(
+        at: byHostURL,
+        includingPropertiesForKeys: nil
+    ) else {
+        return nil
+    }
+
+    let cacheFiles = contents.filter { url in
+        let name = url.lastPathComponent
+        return name.hasPrefix("com.apple.settings.storage.") && name.hasSuffix(".plist")
+    }
+
+    let totals = cacheFiles.compactMap { cachedCategorySize(in: $0) }
+    guard let total = totals.max(), total > 0 else {
+        return nil
+    }
+
+    return total
+}
+
+private func cachedCategorySize(in url: URL) -> Int64? {
+    guard
+        let data = try? Data(contentsOf: url),
+        let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+        let dictionary = plist as? [String: Any]
+    else {
+        return nil
+    }
+
+    let total = dictionary.values.reduce(Int64(0)) { partial, value in
+        guard
+            let section = value as? [String: Any],
+            let itemSizes = section["ItemSizes"] as? [String: Any]
+        else {
+            return partial
+        }
+
+        return partial + itemSizes.values.reduce(Int64(0)) { sectionTotal, itemSize in
+            sectionTotal + int64Value(from: itemSize)
+        }
+    }
+
+    return total > 0 ? total : nil
+}
+
+private func int64Value(from value: Any) -> Int64 {
+    if let value = value as? Int64 {
+        return value
+    }
+
+    if let value = value as? Int {
+        return Int64(value)
+    }
+
+    if let value = value as? NSNumber {
+        return value.int64Value
+    }
+
+    return 0
 }
 
 private final class DailyFreeSpaceHistoryStore {
